@@ -1,0 +1,40 @@
+{
+  "name": "moonbridge-smart-contracts",
+  "author": "Moonbridge",
+  "dependencies": {
+    "@nomiclabs/hardhat-ethers": "^2.2.3",
+    "@nomiclabs/hardhat-etherscan": "^3.1.7",
+    "@openzeppelin/contracts": "^4.8.2",
+    "@openzeppelin/contracts-upgradeable": "^4.8.2",
+    "dotenv": "^16.0.3",
+    "ethers": "^5.7.2"
+  },
+  "scripts": {
+    "test": "npx hardhat test --network hardhatLocal",
+    "serve:remix-ide": "remixd -s ./ -u https://remix.ethereum.org",
+    "compile": "npx hardhat compile",
+    "hardhat:node": "npx hardhat node"
+  },
+  "devDependencies": {
+    "@nomiclabs/hardhat-waffle": "^2.0.5",
+    "@openzeppelin/hardhat-upgrades": "^1.22.1",
+    "@remix-project/remixd": "0.6.5",
+    "@typechain/hardhat": "^6.1.5",
+    "@types/chai": "^4.3.4",
+    "@types/jest": "^29.5.0",
+    "@types/lodash": "^4.14.195",
+    "@types/mocha": "^10.0.1",
+    "@types/web3": "^1.2.2",
+    "chai": "^4.3.7",
+    "hardhat": "^2.13.1",
+    "hardhat-gas-reporter": "^1.0.9",
+    "lodash": "^4.17.21",
+    "ts-node": "^10.9.1",
+    "tslib": "^2.5.0",
+    "typescript": "^5.0.4",
+    "web3": "^1.9.0",
+    "web3-utils": "1.9.0",
+    "big.js": "6.2.1",
+    "@types/big.js": "6.1.6"
+  }
+}
