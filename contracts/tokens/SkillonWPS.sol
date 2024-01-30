@@ -10,7 +10,6 @@ import "../interfaces/dex/IFactory02.sol";
 
 /**
  * @title Skillon
- * @dev A contract representing the Skillon token with fee functionalities.
  */
 contract SkillonWPS is Context, ERC20, ERC20Burnable, Ownable {
     address constant public DEAD_ADDRESS = 0x000000000000000000000000000000000000dEaD; // Dead address constant
@@ -41,13 +40,12 @@ contract SkillonWPS is Context, ERC20, ERC20Burnable, Ownable {
     }
 
     /**
-     * @dev Update given account as authorized or not. Authorized accounts can bypass trading enable/disable state & Excluded from fees
+     * @dev Update given account as authorized or not. Authorized accounts can bypass trading enable/disable state
      * @param account Address for authorization update
      */
     function setAuthorizedAccount(address account, bool state) public onlyOwner {
         require(authorizedAccounts[account] != state, "Nothing changed");
         authorizedAccounts[account] = state;
-        excludeFromFees(account, state);
         emit AuthorizedAccountStateUpdated(account, state);
     }
 
@@ -147,7 +145,7 @@ contract SkillonWPS is Context, ERC20, ERC20Burnable, Ownable {
     }
 
     /**
-     * @dev Transfer tokens from one address to another with a fee deduction.
+     * @dev Transfer tokens from one address to another
      * @param from The address from which the tokens are transferred.
      * @param to The address to which the tokens are transferred.
      * @param amount The amount of tokens to transfer.
