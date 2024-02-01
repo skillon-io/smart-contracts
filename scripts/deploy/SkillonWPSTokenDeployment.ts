@@ -7,7 +7,7 @@ async function main() {
   console.log(`Signer account : ${signerAccount.address}`);
 
   // We get the contract to deploy
-  const tokenErc20 = await ethers.getContractFactory("Skillon", {
+  const tokenErc20 = await ethers.getContractFactory("SkillonWPS", {
     signer: signerAccount
   });
 

@@ -18,7 +18,7 @@ contract SkillonWPS is Context, ERC20, ERC20Burnable, Ownable {
     address public liquidityPoolPair;
     mapping(address => bool) public marketPairs; // Market pairs
     mapping(address => bool) private authorizedAccounts; // Authorized account for add LP & bypass trading state
-    uint8 private _decimals = 8; // Token decimals
+    uint8 private _decimals = 18; // Token decimals
     bool public isTradingActive = false;
 
     event AuthorizedAccountStateUpdated(address indexed account, bool state);
