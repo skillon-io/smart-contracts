@@ -54,14 +54,18 @@ contract TokenDistributionManager is Context, Ownable, ManagerAccess, DepositWit
         require(token_ != address(0x0));
         // Set the token address.
         token = IERC20(token_);
-        // Set swap router
-        swapRouter = IRouter02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
-        // Set LP pair
-        liquidityPool = IPair02(IFactory02(swapRouter.factory()).getPair(swapRouter.WETH(), token_));
         // Set airdrop receiver
         airdropReceiver = _msgSender();
         // Set system fee receiver
         feeReceiver = _msgSender();
+    }
+
+    function setSwapRouter(address swapRouter_) public onlyOwner {
+        require(swapRouter_ != address(0), "Router cant be zero address");
+        // Set swap router
+        swapRouter = IRouter02(swapRouter_);
+        // Set LP pair
+        liquidityPool = IPair02(IFactory02(swapRouter.factory()).getPair(swapRouter.WETH(), address(token)));
     }
 
     function setAllowance(address tokenAddress, address spender, uint allowanceAmount) public onlyOwnerOrManager {
@@ -89,10 +93,18 @@ contract TokenDistributionManager is Context, Ownable, ManagerAccess, DepositWit
         return (piece, value - piece);
     }
 
+    function _min(uint a, uint b) internal pure returns (uint) {
+        return (a < b ? a : b);
+    }
+
+    function _max(uint a, uint b) internal pure returns (uint) {
+        return (a > b ? a : b);
+    }
+
     function _swapTokensForETH(uint swapAmount) internal returns (bool) {
         bool swapCompleted = false;
         address[] memory path = new address[](2);
-        path[0] = address(this);
+        path[0] = address(token);
         path[1] = swapRouter.WETH();
 
         try swapRouter.swapExactTokensForETH(swapAmount, 0, path, address(this), block.timestamp) {
@@ -104,35 +116,36 @@ contract TokenDistributionManager is Context, Ownable, ManagerAccess, DepositWit
         return swapCompleted;
     }
 
+    function _calculateMaxLiquidity(uint ethBalance, uint tokenBalance) internal view returns (uint tokenLiquidity, uint ethLiquidity) {
+        (uint112 reserve0, uint112 reserve1,) = liquidityPool.getReserves();
+        uint ethReserve;
+        uint tokenReserve;
+        if (address(token) == swapRouter.WETH()) {
+            ethReserve = reserve1;
+            tokenReserve = reserve0;
+        } else {
+            ethReserve = reserve0;
+            tokenReserve = reserve1;
+        }
+
+        uint maxEth = (ethReserve * tokenBalance) / tokenReserve;
+        uint maxToken = (tokenReserve * ethBalance) / ethReserve;
+
+        ethLiquidity = _min(maxEth, ethBalance);
+        tokenLiquidity = _min(maxToken, tokenBalance);
+
+        return (tokenLiquidity, ethLiquidity);
+    }
+
     function _addLiquidity(uint tokenBalance) internal {
         uint ethBalance = address(this).balance;
-        uint amountIn = 0;
-        uint ethIn = 0;
-
-        (uint112 res1, uint112 res2,) = liquidityPool.getReserves();
-        amountIn = swapRouter.getAmountIn(ethBalance, res1, res2);
-
-        if (tokenBalance >= amountIn) {
-            // Add completely
-            (uint t, uint e, uint lpt) = swapRouter.addLiquidityETH{value : ethBalance}(
+        if (ethBalance > 0) {
+            (uint tokenLiquidity, uint ethLiquidity) = _calculateMaxLiquidity(ethBalance, tokenBalance);
+            (uint t, uint e, uint lpt) = swapRouter.addLiquidityETH{value : ethLiquidity}(
                 address(token),
-                amountIn,
-                (amountIn * (1000 - liquiditySlippage) / 1000),
-                (ethBalance * (1000 - liquiditySlippage) / 1000),
-                address(this),
-                block.timestamp
-            );
-            emit AddLiquidity(t, e, lpt);
-        } else {
-            // Get max eth in & Calculate max token in
-            ethIn = swapRouter.getAmountOut(tokenBalance, res1, res2);
-            amountIn = swapRouter.getAmountIn(ethIn, res1, res2);
-            // Add partially
-            (uint t, uint e, uint lpt) = swapRouter.addLiquidityETH{value : ethIn}(
-                address(token),
-                amountIn,
-                (amountIn * (1000 - liquiditySlippage) / 1000),
-                (ethIn * (1000 - liquiditySlippage) / 1000),
+                tokenLiquidity,
+                (tokenLiquidity * (1000 - liquiditySlippage) / 1000),
+                (ethLiquidity * (1000 - liquiditySlippage) / 1000),
                 address(this),
                 block.timestamp
             );
@@ -147,7 +160,7 @@ contract TokenDistributionManager is Context, Ownable, ManagerAccess, DepositWit
             return;
         }
         // Sell half of tokens
-        _swapTokensForETH(tokenBalance);
+        _swapTokensForETH(tokenBalance / 2);
 
         // Add remaining tokens as a liquidity
         _addLiquidity(token.balanceOf(address(this)));

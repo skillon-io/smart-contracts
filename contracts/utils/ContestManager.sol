@@ -51,10 +51,11 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
     event MinimumLotAmountUpdated(uint oldAmount, uint amount);
     event DistributionManagerUpdated(address oldAddress, address newAddress);
 
-    event NewContest(address indexed creator, SLib.ContestType contestType, uint lotAmount, uint maxParticipants, uint duration, uint start, uint end);
+    event NewContest(address indexed creator, uint contestID, SLib.ContestType contestType, uint lotAmount, uint maxParticipants, uint duration, uint start, uint end);
     event NewContestParticipation(address indexed participant, uint contestId, uint lotAmount, bool isCreator);
     event ContestIsCompleted(uint contestID, uint totalPrizePool, uint commission);
     event ContestClosed(uint contestID);
+    event MutualContestStarted(uint contestID, uint start, uint end);
 
     // MODIFIERS
     modifier onlyManagerDefined() {
@@ -77,6 +78,10 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         return (piece, value - piece);
     }
 
+    function nextContestID() external view returns (uint) {
+        return (_contestCounter.current() + 1);
+    }
+
     function maximumContestDuration() external view returns (uint) {
         return SLib.stepToDuration(_maxStepSize);
     }
@@ -85,7 +90,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         return _contestCounter.current();
     }
 
-    function setMinimumLotAmount(uint minAmount) external onlyOwner {
+    function setMinimumLotAmount(uint minAmount) external onlyOwnerOrManager {
         require(
             minAmount > 0 &&
             minAmount > lotAmountStepSize &&
@@ -97,7 +102,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit MinimumLotAmountUpdated(oldAmount, minAmount);
     }
 
-    function setLotAmountStepSize(uint stepSize) external onlyOwner {
+    function setLotAmountStepSize(uint stepSize) external onlyOwnerOrManager {
         uint oldStepSize = lotAmountStepSize;
         require(stepSize > 0, "Step size should be higher");
         require(stepSize != oldStepSize, "Nothing changed");
@@ -105,7 +110,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit LotAmountStepSizeUpdated(oldStepSize, stepSize);
     }
 
-    function setMaximumParticipation(uint maxParticipation) external onlyOwner {
+    function setMaximumParticipation(uint maxParticipation) external onlyOwnerOrManager {
         uint oldMaxParticipation = maxParticipationCount;
         require(maxParticipation > 1, "Should higher than 1");
         require(maxParticipation != oldMaxParticipation, "Nothing changed");
@@ -113,7 +118,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit MaximumParticipationUpdated(oldMaxParticipation, maxParticipation);
     }
 
-    function setDurationMaximumStepSize(uint maxStepSize) external onlyOwner {
+    function setDurationMaximumStepSize(uint maxStepSize) external onlyOwnerOrManager {
         uint oldStepSize = _maxStepSize;
         require(maxStepSize >= 6, "Max stepsize should be higher than 6");
         require(maxStepSize != oldStepSize, "Nothing changed");
@@ -121,14 +126,14 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit DurationMaximumStepSizeUpdated(oldStepSize, maxStepSize, SLib.stepToDuration(maxStepSize));
     }
 
-    function setPrizeCommissionPercentage(uint16 percentage) external onlyOwner {
+    function setPrizeCommissionPercentage(uint16 percentage) external onlyOwnerOrManager {
         require(percentage <= MAX_PRIZE_COMMISSION_PERCENTAGE, "Prize percentage is too high");
         uint16 oldPercentage = prizeCommissionPercentage;
         prizeCommissionPercentage = percentage;
         emit PrizeCommissionUpdated(oldPercentage, percentage);
     }
 
-    function setDistributionManager(address distributionManager) public onlyOwner {
+    function setDistributionManager(address distributionManager) public onlyOwnerOrManager {
         require(distributionManager != address(0), "Manager cant be zero address");
         require(distributionManager != address(_distributionManager), "Nothing changed");
         address oldAddress = address(_distributionManager);
@@ -137,7 +142,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit DistributionManagerUpdated(oldAddress, distributionManager);
     }
 
-    function _joinContest(uint contestID, address participant, uint lotAmount, bool isCreator) internal {
+    function _joinContest(uint contestID, address participant, uint lotAmount, bool isCreator, bool isContestStartsNow) internal {
         // Transfer token
         token.safeTransferFrom(participant, address(this), lotAmount);
         // Increase participation counter
@@ -145,8 +150,15 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         // Increase prize pool
         contestPrizePool[contestID] += lotAmount;
         // Set participation state
-        contestParticipation[participant][contestID] = SLib.Participation(lotAmount, 0, false, false);
+        contestParticipation[participant][contestID] = SLib.Participation(lotAmount, 0, false, true);
+        // Emit participation event
         emit NewContestParticipation(_msgSender(), contestID, lotAmount, isCreator);
+        // Set contest time-range & state if it starts now
+        if (isContestStartsNow) {
+            uint endTime = (block.timestamp + contest[contestID].duration);
+            contest[contestID].range = SLib.Range(block.timestamp, endTime);
+            emit MutualContestStarted(contestID, block.timestamp, endTime);
+        }
     }
 
     function createContest(SLib.ContestType contestType, uint maxParticipants, uint duration, uint lotAmount, uint startDateTimestamp) external onlyManagerDefined {
@@ -168,9 +180,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         // Get new contest id
         _contestCounter.increment();
         uint contestID = _contestCounter.current();
-
-        // Create contest & Participation
-        contest[contestID] = SLib.Contest(
+        SLib.Contest memory _newContest = SLib.Contest(
             contestType,
             lotAmount,
             duration,
@@ -182,8 +192,11 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
             true
         );
 
-        emit NewContest(_msgSender(), contestType, lotAmount, maxParticipants, duration, contestRange.start, contestRange.end);
-        _joinContest(contestID, _msgSender(), lotAmount, true);
+        // Create contest & Participation
+        contest[contestID] = _newContest;
+
+        emit NewContest(_msgSender(), contestID, contestType, lotAmount, maxParticipants, duration, contestRange.start, contestRange.end);
+        _joinContest(contestID, _msgSender(), lotAmount, true, false);
     }
 
     function _canJoinContest(SLib.Contest memory _contest, address participant) internal view returns (bool) {
@@ -201,6 +214,10 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
                 return false;
             }
         }
+        if (_contest.state == SLib.ContestState.CLOSED) {
+            // Contest closed
+            return false;
+        }
         return true;
     }
 
@@ -213,8 +230,9 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         SLib.Contest memory _contest = contest[contestID];
         require(_contest._exist, "Contest does not exist");
         require(_canJoinContest(_contest, _msgSender()), "You cant join this contest");
+        bool isContestStartsNow = (_contest.cType == SLib.ContestType.MUTUAL_AGREEMENT && (_contest.participants + 1) == _contest.maxParticipants);
 
-        _joinContest(contestID, _msgSender(), _contest.lotAmount, false);
+        _joinContest(contestID, _msgSender(), _contest.lotAmount, false, isContestStartsNow);
     }
 
     function closeContest(uint contestID) public {
@@ -236,7 +254,7 @@ contract ContestManager is Ownable, ManagerAccess, DepositWithdraw {
         emit ContestClosed(contestID);
     }
 
-    function setContestWinners(uint contestID, address[] calldata winners, uint16[] calldata prizeRatios) public onlyOwner onlyManagerDefined {
+    function setContestWinners(uint contestID, address[] calldata winners, uint16[] calldata prizeRatios) public onlyOwnerOrManager onlyManagerDefined {
         // Contest validations
         SLib.Contest memory _contest = contest[contestID];
         require(_contest._exist, "Contest does not exist");

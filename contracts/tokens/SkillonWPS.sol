@@ -119,6 +119,9 @@ contract SkillonWPS is Context, ERC20, ERC20Burnable, Ownable {
         } else if (block.chainid == 250) {
             // Spooky
             swapRouter = IRouter02(0xF491e7B69E4244ad4002BC14e878a34207E38c29);
+        } else if (chainId == 97) {
+            // PCS - Testnet
+            swapRouter = IRouter02(0xdc4904b5f716Ff30d8495e35dC99c109bb5eCf81);
         } else {
             revert("Chain not valid");
         }

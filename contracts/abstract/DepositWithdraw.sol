@@ -21,9 +21,6 @@ abstract contract DepositWithdraw is Ownable, ReentrancyGuard, ERC721Holder {
         ERC721
     }
 
-    /// @notice Emit when native coin deposit on this contract
-    event Deposit(address indexed account, uint256 amount);
-
     /**
      * @notice Event emitted when withdraw any asset from this contract
      * @param assetType The type of the asset (ERC20, ERC721, Native).
@@ -33,11 +30,12 @@ abstract contract DepositWithdraw is Ownable, ReentrancyGuard, ERC721Holder {
      */
     event Withdraw(AssetType assetType, address assetAddress, uint amount, uint tokenId);
 
-    /**
-     * @notice Allows deposit native coin on the contract
-     */
-    function deposit() external payable onlyOwner {
-        emit Deposit(_msgSender(), msg.value);
+    receive() external payable {
+
+    }
+
+    fallback() external payable {
+
     }
 
     /**
